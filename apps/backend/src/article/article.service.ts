@@ -5,6 +5,7 @@ import { EntityRepository } from '@mikro-orm/mysql';
 
 import { User } from '../user/user.entity';
 import { Article } from './article.entity';
+import { Tag } from '../tag/tag.entity';
 import { IArticleRO, IArticlesRO, ICommentsRO } from './article.interface';
 import { Comment } from './comment.entity';
 import { CreateArticleDto, CreateCommentDto } from './dto';
@@ -19,6 +20,8 @@ export class ArticleService {
     private readonly commentRepository: EntityRepository<Comment>,
     @InjectRepository(User)
     private readonly userRepository: EntityRepository<User>,
+    @InjectRepository(Tag)
+    private readonly tagRepository: EntityRepository<Tag>,
   ) {}
 
   async findAll(userId: number, query: Record<string, string>): Promise<IArticlesRO> {
@@ -154,9 +157,29 @@ export class ArticleService {
       { populate: ['followers', 'favorites', 'articles'] },
     );
     const article = new Article(user!, dto.title, dto.description, dto.body);
-    article.tagList.push(...dto.tagList);
+    
+    if (Array.isArray(dto.tagList)) {
+      article.tagList = dto.tagList;
+    } else {
+      article.tagList = (dto.tagList as String).split(","); // Convert to an array with a single element
+    }
+    
     user?.articles.add(article);
     await this.em.flush();
+
+    const alltags = await this.tagRepository.findAll()
+    console.log(alltags)
+
+    for (const tagName of article.tagList) {
+      console.log(tagName)
+      const tag = await this.tagRepository.findOne({ tag: tagName })
+      if (!tag) {
+        const newtag = new Tag();
+        newtag.tag = tagName;
+        await this.em.persistAndFlush(newtag);
+      }
+      
+    }
 
     return { article: article.toJSON(user!) };
   }
